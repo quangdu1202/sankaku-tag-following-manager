@@ -1,1 +1,924 @@
-function dispatchMessage(e,t,s){window.dispatchMessages([{type:e,text:t}],s)}function initSankakuTools(){return{API_URL:"https://capi-v2.sankakucomplex.com",LOGIN_URL:"https://capi-v2.sankakucomplex.com/auth/token",TAG_WIKI_URL:"https://capi-v2.sankakucomplex.com/tag-and-wiki/name/",FOLLOWING_URL:"https://sankakuapi.com/users/followings?lang=en",isLoading:!1,formData:{login:"",password:""},selectedFile:null,token_type:"",access_token:"",refresh_token:"",access_token_ttl:0,refresh_token_ttl:0,hasToken:!1,copied:!1,accessTokenExpiryDate:null,refreshTokenExpiryDate:null,tags:[],followingTags:[],lastFetchFollowingTagsTime:null,initialized:!1,sortBy:"",sortDesc:!1,selectedTags:[],recentlyUnfollowedTags:[],selectedAll:!1,selectedFollowFilter:"all",selectedFetchFilter:"all",filteredTags:[],init(){if(this.initialized)return;this.initialized=!0;let e=localStorage.getItem("skk_token_type"),t=localStorage.getItem("skk_access_token"),s=localStorage.getItem("skk_refresh_token"),i=localStorage.getItem("skk_access_token_expiry"),a=localStorage.getItem("skk_refresh_token_expiry");e&&t&&s&&(this.token_type=e,this.access_token=t,this.refresh_token=s,this.accessTokenExpiryDate=new Date(i),this.refreshTokenExpiryDate=new Date(a),this.hasToken=!0,this.checkTokenExpiry()),this.getLocalStorageForTags(),this.getLastFetchTime()>300&&this.dispatchMessage("warning","Last fetch was more than 5 minutes ago. You should fetch following tags again.",5e3)},getLocalStorageForTags(){let e=localStorage.getItem("localTags");e&&(this.tags=JSON.parse(e).map(e=>({id:e.id??null,name:e.name,fetched:e.fetched??null,following:e.following??!1})));let t=localStorage.getItem("followingTags");t&&(this.followingTags=JSON.parse(t));let s=localStorage.getItem("lastFetchFollowingTagsTime");s&&(this.lastFetchFollowingTagsTime=s);let i=localStorage.getItem("recentlyUnfollowedTags");i&&(this.recentlyUnfollowedTags=JSON.parse(i)),this.filteredTags=this.tags},updateLocalStorageForTags(){localStorage.setItem("localTags",JSON.stringify(this.tags)),localStorage.setItem("followingTags",JSON.stringify(this.followingTags)),localStorage.setItem("lastFetchFollowingTagsTime",this.lastFetchFollowingTagsTime),localStorage.setItem("recentlyUnfollowedTags",JSON.stringify(this.recentlyUnfollowedTags))},dispatchMessage(e,t,s){window.dispatchMessages([{type:e,text:t}],s)},getToken(){this.isLoading=!0,fetch(this.LOGIN_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(this.formData)}).then(e=>{if(e.redirected)window.location.href=e.url;else{if(e.ok)return e.json();this.dispatchMessage("warning","Something went wrong. Please try again later!",5e3),this.isLoading=!1}}).then(e=>{if(this.isLoading=!1,e.success&&e.token_type&&e.access_token&&e.refresh_token){this.token_type=e.token_type,this.access_token=e.access_token,this.refresh_token=e.refresh_token,this.access_token_ttl=e.access_token_ttl,this.refresh_token_ttl=e.refresh_token_ttl,localStorage.setItem("skk_token_type",this.token_type),localStorage.setItem("skk_access_token",this.access_token),localStorage.setItem("skk_refresh_token",this.refresh_token);let t=new Date;this.accessTokenExpiryDate=new Date(t.getTime()+1e3*this.access_token_ttl),this.refreshTokenExpiryDate=new Date(t.getTime()+1e3*this.refresh_token_ttl),localStorage.setItem("skk_access_token_expiry",this.accessTokenExpiryDate),localStorage.setItem("skk_refresh_token_expiry",this.refreshTokenExpiryDate),this.hasToken=!0,this.dispatchMessage("success","Login successful! Tokens saved.",5e3),this.checkTokenExpiry()}else this.dispatchMessage("warning","Invalid credentials or unknown error!",5e3)}).catch(e=>{console.error("Error:",e),this.isLoading=!1})},checkTokenExpiry(){let e=new Date;if(this.accessTokenExpiryDate){let t=Math.round((this.accessTokenExpiryDate-e)/1e3);t<=0?(this.dispatchMessage("warning","Access token has expired. Please log in again.",5e3),this.hasToken=!1):t<=3600&&this.dispatchMessage("warning",`Access token will expire in ${Math.round(t/60)} minutes.`,5e3)}if(this.refreshTokenExpiryDate){let s=Math.round((this.refreshTokenExpiryDate-e)/1e3);s<=0?(this.dispatchMessage("warning","Refresh token has expired. Please log in again.",5e3),this.hasToken=!1):s<=86400&&this.dispatchMessage("warning",`Refresh token will expire in ${Math.round(s/3600)} hours.`,5e3)}},copyToken(){let e=this.$refs.token.textContent;if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(e).catch(e=>{console.error("Error copying token: ",e)});else{let t=document.createElement("textarea");t.value=e,t.style.position="absolute",t.style.left="-9999px",document.body.appendChild(t),t.select();try{document.execCommand("copy"),this.dispatchMessage("success","Token copied!",5e3)}catch(s){console.error("Fallback: Error copying token",s)}document.body.removeChild(t)}},copyRefreshToken(){let e=this.$refs.refreshToken.textContent;if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(e).catch(e=>{console.error("Error copying token: ",e)});else{let t=document.createElement("textarea");t.value=e,t.style.position="absolute",t.style.left="-9999px",document.body.appendChild(t),t.select();try{document.execCommand("copy"),this.dispatchMessage("success","Refresh Token copied!",5e3)}catch(s){console.error("Fallback: Error copying refresh token",s)}document.body.removeChild(t)}},handleFileUpload(e){this.selectedFile=e.target.files[0]},processFile(){if(!this.selectedFile){this.dispatchMessage("warning","Please select a file!",5e3);return}this.isLoading=!0;let e=new FileReader;e.onload=e=>{let t=e.target.result.split("\n");t.forEach(e=>{let t=e.trim();if(t&&!t.startsWith("#")&&!t.startsWith("//")){let s=t.toLowerCase();this.tags.some(e=>e.name.toLowerCase()===s)||this.tags.push({name:s,fetched:!1,following:!1})}}),this.updateLocalStorageForTags()},e.readAsText(this.selectedFile),this.isLoading=!1},fetchTagWiki(e,t=!1){if(!t){if(!0===e.fetched){this.dispatchMessage("warning","Tag already fetched!",5e3);return}this.isLoading=!0,fetch(this.TAG_WIKI_URL+e.name,{method:"GET"}).then(e=>{if(e.redirected)window.location.href=e.url;else if(e.ok)return e.json();else throw Error("Tag not found or something went wrong!")}).then(s=>{if(s.tag){console.log(s.tag);let i=s.tag.id;this.tags=this.tags.map(t=>(t.name===e.name&&(t.fetched=!0,t.id=i),t)),this.updateLocalStorageForTags(),t||this.dispatchMessage("success","Tags fetching status updated!",5e3),this.checkTokenExpiry()}else t||this.dispatchMessage("warning","Unknown error!",5e3);t||(this.isLoading=!1)}).catch(s=>{console.error("Error:",s),t||this.dispatchMessage("warning",s.message,5e3),this.tags=this.tags.map(t=>(t.name===e.name&&(t.fetched=null,t.id=null,t.follwing=null),t)),this.updateLocalStorageForTags(),t||(this.isLoading=!1)})}},refreshAllTags(){if(!confirm("Do you want to refresh all tags?"))return;this.isLoading=!0,console.log("Refreshing all tags");let e=0,t=()=>{let s=this.tags.slice(e,e+10),i=s.map(e=>this.fetchTagWiki(e,!0));Promise.all(i).then(()=>{(e+=10)<this.tags.length?setTimeout(t,2e3):(this.isLoading=!1,this.dispatchMessage("success","All tags refreshed!",5e3))}).catch(e=>{console.error("Error in refreshing tags:",e),this.dispatchMessage("warning","Some tags could not be refreshed.",5e3),this.isLoading=!1})};t()},getTagPostsUrl:e=>e.postsUrl||`https://www.sankakucomplex.com/?tags=${e.name}`,getTagWikiUrl:e=>e.wikiUrl||`https://www.sankakucomplex.com/tag?tagName=${e.name}`,fetchFollowingTags(){this.isLoading=!0,fetch(this.FOLLOWING_URL,{method:"GET",headers:{Authorization:`Bearer ${this.access_token}`,"Content-Type":"application/json"}}).then(e=>{if(e.redirected)window.location.href=e.url;else if(e.ok)return e.json();else throw Error("Token expired or something went wrong!")}).then(e=>{e.tags?(this.followingTags=e.tags.map(e=>({id:e.id,name:e.name_en||e.name_ja||e.name,following:!0})),this.followingTags.forEach(e=>{let t=this.tags.find(t=>t.id===e.id);t?t.following=!0:this.tags.push({id:e.id,name:e.name,fetched:!1,following:!0})}),this.updateLocalStorageForTags(),this.dispatchMessage("success","Tags following status updated!",5e3),this.checkTokenExpiry()):this.dispatchMessage("warning","No data or unknown error!",5e3),this.isLoading=!1}).catch(e=>{console.error("Error:",e),this.dispatchMessage("warning",e.message,5e3),this.isLoading=!1}),this.lastFetchFollowingTagsTime=new Date,this.updateLocalStorageForTags()},followTag(e,t=!1){if(!t&&!0===e.following){this.dispatchMessage("warning","Tag already followed!",5e3);return}(!t||!0!==e.following)&&(this.isLoading=!0,fetch(this.FOLLOWING_URL,{method:"POST",headers:{Authorization:`Bearer ${this.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({following_id:`${e.id}`,type:"tag"})}).then(e=>{if(e.redirected)window.location.href=e.url;else if(e.ok)return e.json();else throw Error("Token expired or something went wrong!")}).then(s=>{if(s.id){this.tags=this.tags.map(e=>(e.id===s.id&&(e.following=!0),e));let i=this.followingTags.find(e=>e.id===s.id);i?this.followingTags=this.followingTags.map(e=>(e.id===s.id&&(e.following=!0),e)):this.followingTags.push({id:e.id,name:e.name,following:!0}),this.updateLocalStorageForTags(),t||this.dispatchMessage("success","Tag followed!",5e3),this.checkTokenExpiry()}else{if(t)throw Error("No data or unknown error!");this.dispatchMessage("warning","No data or unknown error!",5e3)}this.isLoading=!1}).catch(e=>{console.error("Error:",e),t||this.dispatchMessage("warning",e.message,5e3),this.isLoading=!1}))},unfollowTag(e,t=!1){if(!t&&!1===e.following){this.dispatchMessage("warning","Tag already unfollowed!",5e3);return}(!t||!1!==e.following)&&(this.isLoading=!0,fetch(this.FOLLOWING_URL,{method:"DELETE",headers:{Authorization:`Bearer ${this.access_token}`,"Content-Type":"application/json"},body:JSON.stringify({following_id:`${e.id}`,type:"tag"})}).then(e=>{if(e.redirected)window.location.href=e.url;else if(e.ok)return e.json();else throw Error("Token expired or something went wrong!")}).then(s=>{!0===s.success?(this.tags=this.tags.map(t=>(t.id===e.id&&(t.following=!1),t)),this.followingTags=this.followingTags.filter(t=>t.id!==e.id),this.recentlyUnfollowedTags.find(t=>t.id===e.id)||this.recentlyUnfollowedTags.push(e),this.updateLocalStorageForTags(),t||this.dispatchMessage("success","Tag unfollowed successfully!",5e3),this.checkTokenExpiry()):this.dispatchMessage("warning","No data or unknown error!",5e3),this.isLoading=!1}).catch(e=>{console.error("Error:",e),t||this.dispatchMessage("warning",e.message,5e3),this.isLoading=!1}))},selectTag(e){e.selected=!e.selected,!0===e.selected?this.selectedTags.push(e):this.selectedTags=this.selectedTags.filter(t=>t.id!==e.id)},selectAll(){this.selectedAll=!this.selectedAll,this.filteredTags=this.filteredTags.map(e=>(e.selected=e.fetched&&this.selectedAll,e)),this.selectedTags=this.selectedAll?this.filteredTags.filter(e=>e.selected):[],console.log("Selected tags:",this.selectedTags)},followSelectedTags(){if(0===this.selectedTags.length){this.dispatchMessage("warning","No tags selected!",5e3);return}if(!confirm("Do you want to follow selected tags?"))return;if(this.getLastFetchTime()>300){if(!confirm("Last fetch was more than 5 minutes ago. Do you want to fetch following status first?"))return;this.fetchFollowingTags();return}this.isLoading=!0,console.log("Following all tags");let e=0,t=()=>{let s=this.selectedTags.slice(e,e+2),i=s.map(e=>this.followTag(e,!0));Promise.all(i).then(()=>{(e+=2)<this.selectedTags.length?setTimeout(t,2e3):(this.isLoading=!1,this.dispatchMessage("success","All selected tags followed!",5e3))}).catch(e=>{console.error("Error in following tags:",e),this.dispatchMessage("warning","Some tags could not be followed.",5e3),this.isLoading=!1})};t()},unFollowSelectedTags(){if(0===this.selectedTags.length){this.dispatchMessage("warning","No tags selected!",5e3);return}if(!confirm("Do you want to unfollow selected tags?"))return;if(this.getLastFetchTime()>300){if(!confirm("Last fetch was more than 5 minutes ago. Do you want to fetch following status first?"))return;this.fetchFollowingTags();return}this.isLoading=!0,console.log("Unfollowing all tags");let e=0,t=()=>{let s=this.selectedTags.slice(e,e+2),i=s.map(e=>this.unfollowTag(e,!0));Promise.all(i).then(()=>{(e+=2)<this.selectedTags.length?setTimeout(t,2e3):(this.isLoading=!1,this.dispatchMessage("success","All tags unfollowed!",5e3))}).catch(e=>{console.error("Error in unfollowing tags:",e),this.dispatchMessage("warning","Some tags could not be unfollowed.",5e3),this.isLoading=!1})};t()},getLastFetchTime(){let e=this.lastFetchFollowingTagsTime||localStorage.getItem("lastFetchFollowingTagsTime");return e?Math.abs(new Date-new Date(e))/1e3:999999999},sortTags(e){this.sortBy===e?this.sortDesc=!this.sortDesc:(this.sortBy=e,this.sortDesc=!1),this.tags.sort((t,s)=>{let i=t[e],a=s[e];return("string"==typeof i&&(i=i.toLowerCase()),"string"==typeof a&&(a=a.toLowerCase()),i<a)?this.sortDesc?1:-1:i>a?this.sortDesc?-1:1:0}),this.updateLocalStorageForTags()},filterTags(){this.filteredTags=this.tags.filter(e=>{let t="all"===this.selectedFollowFilter||e.following==this.selectedFollowFilter,s="all"===this.selectedFetchFilter||e.fetched==this.selectedFetchFilter;return t&&s})},downloadTagsJson(){let e=this.tags.map(e=>({id:e.id,name:e.name,following:e.following,postsUrl:this.getTagPostsUrl(e),wikiUrl:this.getTagWikiUrl(e)})),t=JSON.stringify(e,null,2),s=new Blob([t],{type:"application/json"}),i=URL.createObjectURL(s),a=window.open();a.document.write(`<pre>${t}</pre>`),a.document.close(),URL.revokeObjectURL(i)},directDownloadTagsJson(){let e=this.tags.map(e=>({id:e.id,name:e.name,following:e.following,postsUrl:this.getTagPostsUrl(e),wikiUrl:this.getTagWikiUrl(e)})),t=JSON.stringify(e,null,2),s=new Blob([t],{type:"application/json"}),i=URL.createObjectURL(s),a=document.createElement("a");a.href=i,a.download="tags.json",a.click(),URL.revokeObjectURL(i)}}}window.dispatchMessages=function(e,t){e.forEach(e=>{let s=document.createElement("div");s.className=`notification ${e.type}`,s.innerText=`${e.type.toUpperCase()}: ${e.text}`,document.body.appendChild(s),t>0&&setTimeout(()=>{s.remove()},t)})};
+// Define the window.dispatchMessages function
+window.dispatchMessages = function(messages, timeout) {
+    messages.forEach(message => {
+        const notification = document.createElement('div');
+        notification.className = `notification ${message.type}`;
+        notification.innerText = `${message.type.toUpperCase()}: ${message.text}`;
+        document.body.appendChild(notification);
+
+        if (timeout > 0) {
+            setTimeout(() => {
+                notification.remove();
+            }, timeout);
+        }
+    });
+};
+
+// Define the dispatchMessage function
+function dispatchMessage(type, message, timeout) {
+    window.dispatchMessages([{ type: type, text: message }], timeout);
+}
+
+function initSankakuTools() {
+    return {
+        API_URL: "https://capi-v2.sankakucomplex.com",
+        LOGIN_URL: "https://capi-v2.sankakucomplex.com/auth/token",
+        TAG_WIKI_URL: "https://capi-v2.sankakucomplex.com/tag-and-wiki/name/",
+        FOLLOWING_URL: "https://sankakuapi.com/users/followings?lang=en",
+        isLoading: false,
+        formData: {
+            login: '',
+            password: ''
+        },
+        selectedFile: null,
+        token_type: '',
+        access_token: '',
+        refresh_token: '',
+        access_token_ttl: 0,  // Token time-to-live in seconds
+        refresh_token_ttl: 0,  // Refresh token time-to-live in seconds
+        hasToken: false,
+        copied: false,
+        accessTokenExpiryDate: null,
+        refreshTokenExpiryDate: null,
+        tags: [],
+        followingTags: [],
+        lastFetchFollowingTagsTime: null,
+        initialized: false,
+        sortBy: '', // Current sorting field ('name' or 'following')
+        sortDesc: false, // Track sorting direction
+        selectedTags: [],
+        recentlyUnfollowedTags: [],
+        selectedAll: false,
+        selectedFollowFilter: "all",
+        selectedFetchFilter: "all",
+        filteredTags: [],
+
+        // Check local storage on init
+        init() {
+            if (this.initialized) return;
+            this.initialized = true;
+            const savedTokenType = localStorage.getItem('skk_token_type');
+            const savedAccessToken = localStorage.getItem('skk_access_token');
+            const savedRefreshToken = localStorage.getItem('skk_refresh_token');
+            const savedAccessTokenExpiry = localStorage.getItem('skk_access_token_expiry');
+            const savedRefreshTokenExpiry = localStorage.getItem('skk_refresh_token_expiry');
+
+            if (savedTokenType && savedAccessToken && savedRefreshToken) {
+                this.token_type = savedTokenType;
+                this.access_token = savedAccessToken;
+                this.refresh_token = savedRefreshToken;
+                this.accessTokenExpiryDate = new Date(savedAccessTokenExpiry);
+                this.refreshTokenExpiryDate = new Date(savedRefreshTokenExpiry);
+                this.hasToken = true;
+
+                // Check token expiry
+                this.checkTokenExpiry();
+            }
+
+            // Get all local storage values related to tags
+            this.getLocalStorageForTags()
+
+            // check if last fetch was more than 5 minutes ago
+            if (this.getLastFetchTime() > 300) {
+                this.dispatchMessage("warning", "Last fetch was more than 5 minutes ago. You should fetch following tags again.", 5000);
+            }
+        },
+
+        getLocalStorageForTags() {
+            // Get all local storage values related to tags
+            const storedLocalTags = localStorage.getItem('localTags');
+            if (storedLocalTags) {
+                // Map file content from local storage to tags
+                this.tags = JSON.parse(storedLocalTags).map(tag => ({
+                        id: tag.id ?? null,
+                        name: tag.name,
+                        fetched: tag.fetched ?? null,
+                        following: tag.following ?? false
+                    })
+                );
+            }
+
+            const storedFollowingTags = localStorage.getItem('followingTags');
+            if (storedFollowingTags) {
+                this.followingTags = JSON.parse(storedFollowingTags);
+            }
+
+            const storedLastFetchTime = localStorage.getItem('lastFetchFollowingTagsTime');
+            if (storedLastFetchTime) {
+                this.lastFetchFollowingTagsTime = storedLastFetchTime;
+            }
+
+            const storedRecentlyUnfollowedTags = localStorage.getItem('recentlyUnfollowedTags');
+            if (storedRecentlyUnfollowedTags) {
+                this.recentlyUnfollowedTags = JSON.parse(storedRecentlyUnfollowedTags);
+            }
+
+            this.filteredTags = this.tags
+        },
+
+        updateLocalStorageForTags() {
+            // update all local storage values related to tags
+            localStorage.setItem('localTags', JSON.stringify(this.tags));
+            localStorage.setItem('followingTags', JSON.stringify(this.followingTags));
+            localStorage.setItem('lastFetchFollowingTagsTime', this.lastFetchFollowingTagsTime);
+            localStorage.setItem('recentlyUnfollowedTags', JSON.stringify(this.recentlyUnfollowedTags));
+        },
+
+        dispatchMessage(type, message, timeout) {
+            window.dispatchMessages([{ type: type, text: message }], timeout);
+        },
+
+        getToken() {
+            this.isLoading = true;
+            fetch(this.LOGIN_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.formData)
+            })
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else if (response.ok) {
+                        return response.json();
+                    } else {
+                        this.dispatchMessage("warning", "Something went wrong. Please try again later!", 5000);
+                        this.isLoading = false;
+                    }
+                })
+                .then(data => {
+                    this.isLoading = false;
+                    if (data.success && data.token_type && data.access_token && data.refresh_token) {
+                        this.token_type = data.token_type;
+                        this.access_token = data.access_token;
+                        this.refresh_token = data.refresh_token;
+                        this.access_token_ttl = data.access_token_ttl;  // In seconds
+                        this.refresh_token_ttl = data.refresh_token_ttl; // In seconds
+
+                        // Store tokens in local storage
+                        localStorage.setItem('skk_token_type', this.token_type);
+                        localStorage.setItem('skk_access_token', this.access_token);
+                        localStorage.setItem('skk_refresh_token', this.refresh_token);
+
+                        // Calculate token expiry dates
+                        const now = new Date();
+                        this.accessTokenExpiryDate = new Date(now.getTime() + this.access_token_ttl * 1000);
+                        this.refreshTokenExpiryDate = new Date(now.getTime() + this.refresh_token_ttl * 1000);
+
+                        // Store expiry dates in local storage
+                        localStorage.setItem('skk_access_token_expiry', this.accessTokenExpiryDate);
+                        localStorage.setItem('skk_refresh_token_expiry', this.refreshTokenExpiryDate);
+
+                        this.hasToken = true;
+                        this.dispatchMessage("success", "Login successful! Tokens saved.", 5000);
+
+                        // Check token expiry
+                        this.checkTokenExpiry();
+                    } else {
+                        this.dispatchMessage("warning", "Invalid credentials or unknown error!", 5000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.isLoading = false;
+                });
+        },
+
+        checkTokenExpiry() {
+            const now = new Date();
+
+            if (this.accessTokenExpiryDate) {
+                const accessTokenExpiresIn = Math.round((this.accessTokenExpiryDate - now) / 1000); // seconds
+                if (accessTokenExpiresIn <= 0) {
+                    this.dispatchMessage("warning", "Access token has expired. Please log in again.", 5000);
+                    this.hasToken = false; // Clear token
+                } else if (accessTokenExpiresIn <= 3600) { // 1 hour before expiration
+                    this.dispatchMessage("warning", `Access token will expire in ${Math.round(accessTokenExpiresIn / 60)} minutes.`, 5000);
+                }
+            }
+
+            if (this.refreshTokenExpiryDate) {
+                const refreshTokenExpiresIn = Math.round((this.refreshTokenExpiryDate - now) / 1000); // seconds
+                if (refreshTokenExpiresIn <= 0) {
+                    this.dispatchMessage("warning", "Refresh token has expired. Please log in again.", 5000);
+                    this.hasToken = false; // Clear token
+                } else if (refreshTokenExpiresIn <= 86400) { // 1 day before expiration
+                    this.dispatchMessage("warning", `Refresh token will expire in ${Math.round(refreshTokenExpiresIn / 3600)} hours.`, 5000);
+                }
+            }
+        },
+
+        copyToken() {
+            const tokenText = this.$refs.token.textContent;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Use the clipboard API if available
+                navigator.clipboard
+                    .writeText(tokenText)
+                    .catch(err => {
+                        console.error('Error copying token: ', err);
+                    });
+            } else {
+                // Fallback approach for unsupported browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = tokenText;
+                textarea.style.position = 'absolute';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    this.dispatchMessage("success", "Token copied!", 5000);
+                } catch (err) {
+                    console.error('Fallback: Error copying token', err);
+                }
+                document.body.removeChild(textarea);
+            }
+        },
+
+        copyRefreshToken() {
+            const tokenText = this.$refs.refreshToken.textContent;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Use the clipboard API if available
+                navigator.clipboard
+                    .writeText(tokenText)
+                    .catch(err => {
+                        console.error('Error copying token: ', err);
+                    });
+            } else {
+                // Fallback approach for unsupported browsers
+                const textarea = document.createElement('textarea');
+                textarea.value = tokenText;
+                textarea.style.position = 'absolute';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    this.dispatchMessage("success", "Refresh Token copied!", 5000);
+                } catch (err) {
+                    console.error('Fallback: Error copying refresh token', err);
+                }
+                document.body.removeChild(textarea);
+            }
+        },
+
+        handleFileUpload(event) {
+            this.selectedFile = event.target.files[0];
+        },
+
+        processFile() {
+            if (!this.selectedFile) {
+                this.dispatchMessage("warning", "Please select a file!", 5000);
+                return;
+            }
+
+            this.isLoading = true;
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const fileContent = event.target.result.split('\n');
+
+                // Save each line to tags array
+                // Skip empty lines and lines starting with # or // or duplicate names, case-insensitive
+                fileContent.forEach(line => {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine && !trimmedLine.startsWith('#') && !trimmedLine.startsWith('//')) {
+                        const tagName = trimmedLine.toLowerCase();
+                        if (!this.tags.some(tag => tag.name.toLowerCase() === tagName)) {
+                            this.tags.push({ name: tagName, fetched: false, following: false });
+                        }
+                    }
+                });
+
+                // Update local storage
+                this.updateLocalStorageForTags();
+            };
+
+            reader.readAsText(this.selectedFile);
+
+            this.filteredTags = this.tags;
+
+            this.isLoading = false;
+        },
+
+        fetchTagWiki(tag, fetchAll = false) {
+            if (!fetchAll && tag.fetched === true) {
+                this.dispatchMessage("warning", "Tag already fetched!", 5000);
+            }
+
+            if (fetchAll && tag.fetched === true) {
+                return;
+            }
+
+            this.isLoading = true;
+            fetch(this.TAG_WIKI_URL + tag.name, {
+                method: 'GET'
+            })
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Tag not found or something went wrong!');
+                    }
+                })
+                .then(data => {
+                    if (data.tag) {
+                        console.log(data.tag);
+                        const tagId = data.tag.id;
+
+                        // Update tag fetching status and tag id of both alpinejs and local storage
+                        this.tags = this.tags.map(locTag => {
+                            if (locTag.name === tag.name) {
+                                locTag.fetched = true;
+                                locTag.id = tagId;
+                            }
+                            return locTag;
+                        });
+
+                        // Update local storage
+                        this.updateLocalStorageForTags();
+
+                        if (!fetchAll) {
+                            this.dispatchMessage("success", "Tags fetching status updated!", 5000);
+                        }
+
+                        // Check token expiry
+                        this.checkTokenExpiry();
+                    } else {
+                        if (!fetchAll) {
+                            this.dispatchMessage("warning", "Unknown error!", 5000);
+                        }
+                    }
+                    if (!fetchAll) {
+                        this.isLoading = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    if (!fetchAll) {
+                        this.dispatchMessage("warning", error.message, 5000);
+                    }
+
+                    // Update tag fetching status and tag id of both alpinejs and local storage
+                    this.tags = this.tags.map(locTag => {
+                        if (locTag.name === tag.name) {
+                            locTag.fetched = null;
+                            locTag.id = null;
+                            locTag.follwing = null;
+                        }
+
+                        return locTag;
+                    });
+
+                    // Update local storage
+                    this.updateLocalStorageForTags();
+
+                    if (!fetchAll) {
+                        this.isLoading = false;
+                    }
+                });
+        },
+
+        refreshAllTags() {
+            // Ask if user wants to refresh all tags
+            if (!confirm('Do you want to refresh all tags?')) {
+                return;
+            }
+
+            this.isLoading = true; // Set loading state
+            console.log('Refreshing all tags');
+
+            const batchSize = 10; // Process 10 tags at a time
+            let batchIndex = 0;
+
+            const processBatch = () => {
+                // Get the current batch of tags
+                const batch = this.tags.slice(batchIndex, batchIndex + batchSize);
+                const fetchPromises = batch.map(tag => this.fetchTagWiki(tag, true));
+
+                // Wait for all fetches in the current batch to complete
+                Promise.all(fetchPromises)
+                    .then(() => {
+                        batchIndex += batchSize; // Move to the next batch
+
+                        // If there are more tags, continue processing after a 2-second delay
+                        if (batchIndex < this.tags.length) {
+                            setTimeout(processBatch, 2000); // Wait 2 seconds and process next batch
+                        } else {
+                            this.isLoading = false; // Reset loading state
+                            this.dispatchMessage("success", "All tags refreshed!", 5000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error in refreshing tags:', error);
+                        this.dispatchMessage("warning", "Some tags could not be refreshed.", 5000);
+                        this.isLoading = false; // Reset loading state
+                    });
+            };
+
+            // Start processing the first batch
+            processBatch();
+        },
+
+        getTagPostsUrl (tag) {
+            if (tag.fetched !== true) return null; 
+            return tag.postsUrl || `https://www.sankakucomplex.com/?tags=${tag.name}`;
+        },
+
+        getTagWikiUrl (tag) {
+            if (tag.fetched !== true) return null;
+            return tag.wikiUrl || `https://www.sankakucomplex.com/tag?tagName=${tag.name}`;
+        },
+
+        fetchFollowingTags() {
+            this.isLoading = true;
+            fetch(this.FOLLOWING_URL, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${this.access_token}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Token expired or something went wrong!');
+                }
+            })
+            .then(data => {
+                if (data.tags) {
+                    // The response contains tags in json format, example:
+                    //    {
+                    //         "id": 48520,
+                    //         "name_en": "Nironiro",
+                    //         "name_ja": "にろ",
+                    //         "type": 1,
+                    //         "count": 5482,
+                    //         "post_count": 5482,
+                    //         "pool_count": 186,
+                    //         "series_count": 0,
+                    //         "locale": "en",
+                    //         "rating": "e",
+                    //         "version": 1,
+                    //         "tagName": "nironiro",
+                    //         "total_post_count": 5482,
+                    //         "total_pool_count": 186,
+                    //         "name": "Nironiro",
+                    //         "notification_enabled": true
+                    //     }
+
+                    this.followingTags = data.tags.map(tag => ({
+                        id: tag.id,
+                        name: tag.name_en || tag.name_ja || tag.name, // Fallback on name if other fields are not present
+                        following: true
+                    }));
+
+                    // Update this.tags: if a tag exists in followingTags, update its following status;
+                    // if a tag doesn't exist, add it.
+                    this.followingTags.forEach(followingTag => {
+                        // Find the tag in the this.tags array
+                        const foundTag = this.tags.find(tag => tag.id === followingTag.id);
+
+                        if (foundTag) {
+                            // Update existing tag's following status
+                            foundTag.following = true;
+                        } else {
+                            // Add the new tag to this.tags if not found
+                            this.tags.push({
+                                id: followingTag.id,
+                                name: followingTag.name,
+                                fetched: false,
+                                following: true
+                            });
+                        }
+                    });
+
+                    // Update local storage
+                    this.updateLocalStorageForTags();
+
+
+                    this.dispatchMessage("success", "Tags following status updated!", 5000);
+
+                    // Check token expiry
+                    this.checkTokenExpiry();
+                } else {
+                    this.dispatchMessage("warning", "No data or unknown error!", 5000);
+                }
+
+                this.isLoading = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.dispatchMessage("warning", error.message, 5000);
+
+                // Don't update local storage on error, retain previous state
+                this.isLoading = false;
+            });
+
+            this.lastFetchFollowingTagsTime = new Date();
+            this.updateLocalStorageForTags();
+        },
+
+        followTag(tag, batchAction = false) {
+            if (!batchAction && tag.following === true) {
+                this.dispatchMessage("warning", "Tag already followed!", 5000);
+                return;
+            }
+
+            if (batchAction && tag.following === true) {
+                return;
+            }
+
+            this.isLoading = true;
+            fetch(this.FOLLOWING_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'following_id': `${tag.id}`,
+                    'type': "tag"
+                })
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Token expired or something went wrong!');
+                }
+            })
+            .then(data => {
+                if (data.id) {
+                    // Update following status in this.tags
+                    this.tags = this.tags.map(locTag => {
+                        if (locTag.id === data.id) {
+                            locTag.following = true;  // Set following to true
+                        }
+
+                        return locTag;
+                    });
+
+                    // Check if the tag exists in followingTags and update or add
+                    const foundTag = this.followingTags.find(followingTag => followingTag.id === data.id);
+                    if (!foundTag) {
+                        // Add tag to followingTags if not already there
+                        this.followingTags.push({
+                            id: tag.id,
+                            name: tag.name,
+                            following: true
+                        });
+                    } else {
+                        // If it exists, ensure it's marked as following
+                        this.followingTags = this.followingTags.map(followingTag => {
+                            if (followingTag.id === data.id) {
+                                followingTag.following = true;
+                            }
+                            return followingTag;
+                        });
+                    }
+
+                    // Update local storage
+                    this.updateLocalStorageForTags();
+
+
+                    if (!batchAction) {
+                        this.dispatchMessage("success", "Tag followed!", 5000);
+                    }
+
+                    // Check token expiry
+                    this.checkTokenExpiry();
+                } else {
+                    if (!batchAction) {
+                        this.dispatchMessage("warning", "No data or unknown error!", 5000);
+                    }else {
+                        throw new Error('No data or unknown error!');
+                    }
+                }
+
+                this.isLoading = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                if (!batchAction) {
+                    this.dispatchMessage("warning", error.message, 5000);
+                }
+
+                // Don't update local storage on error, retain previous state
+                this.isLoading = false;
+            });
+        },
+
+        unfollowTag(tag, batchAction = false) {
+            if (!batchAction && tag.following === false) {
+                this.dispatchMessage("warning", "Tag already unfollowed!", 5000);
+                return;
+            }
+
+            if (batchAction && tag.following === false) {
+                return;
+            }
+
+            this.isLoading = true;
+            fetch(this.FOLLOWING_URL, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${this.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    'following_id': `${tag.id}`,
+                    'type': "tag"
+                })
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Token expired or something went wrong!');
+                }
+            })
+            .then(data => {
+                if (data.success === true) {
+                    // Update following status in this.tags
+                    this.tags = this.tags.map(locTag => {
+                        if (locTag.id === tag.id) {
+                            locTag.following = false;  // Set following to false
+                        }
+                        return locTag;
+                    });
+
+                    // Remove the tag from followingTags
+                    this.followingTags = this.followingTags.filter(followingTag => followingTag.id !== tag.id);
+
+                    // Add the tag to recentlyUnfollowedTags
+                    // push only if not exist
+                    if (!this.recentlyUnfollowedTags.find(followedTag => followedTag.id === tag.id)) {
+                        this.recentlyUnfollowedTags.push(tag);
+                    }
+
+                    // Update local storage
+                    this.updateLocalStorageForTags();
+
+                    if (!batchAction) {
+                        this.dispatchMessage("success", "Tag unfollowed successfully!", 5000);
+                    }
+
+                    // Check token expiry
+                    this.checkTokenExpiry();
+                } else {
+                    this.dispatchMessage("warning", "No data or unknown error!", 5000);
+                }
+
+                this.isLoading = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                if (!batchAction) {
+                    this.dispatchMessage("warning", error.message, 5000);
+                }
+
+                // Don't update local storage on error, retain previous state
+                this.isLoading = false;
+            });
+        },
+
+        selectTag(tag) {
+            tag.selected = !tag.selected
+
+            if (tag.selected === true) {
+                this.selectedTags.push(tag);
+            } else {
+                this.selectedTags = this.selectedTags.filter(selectedTag => selectedTag.id !== tag.id);
+            }
+        },
+
+        selectAll() {
+            this.selectedAll = !this.selectedAll;
+
+            this.filteredTags = this.filteredTags.map((e) => ((e.selected = e.fetched && this.selectedAll), e));
+
+            this.selectedTags = this.selectedAll ? this.filteredTags.filter((e) => e.selected) : [];
+
+            console.log(this.selectedTags);
+        },
+
+        followSelectedTags() {
+            if (this.selectedTags.length === 0) {
+                this.dispatchMessage("warning", "No tags selected!", 5000);
+                return;
+            }
+
+            // Ask if user wants to follow all tags
+            if (!confirm('Do you want to follow selected tags?')) {
+                return;
+            }
+
+            // check if last fetch was more than 5 minutes ago
+            if (this.getLastFetchTime() > 300) {
+                if (!confirm('Last fetch was more than 5 minutes ago. Do you want to fetch following status first?')) {
+                    return;
+                }
+                this.fetchFollowingTags();
+                return;
+            }
+
+            this.isLoading = true;
+            console.log('Following all tags');
+
+            const batchSize = 2;
+            let batchIndex = 0;
+
+            const processBatch = () => {
+                const batch = this.selectedTags.slice(batchIndex, batchIndex + batchSize);
+                const followPromises = batch.map(tag => this.followTag(tag, true));
+
+                // Wait for all follows in the current batch to complete
+                Promise.all(followPromises)
+                    .then(() => {
+                        batchIndex += batchSize; // Move to the next batch
+
+                        // If there are more tags, continue processing after a 2-second delay
+                        if (batchIndex < this.selectedTags.length) {
+                            setTimeout(processBatch, 2000); // Wait 2 seconds and process next batch
+                        } else {
+                            this.isLoading = false; // Reset loading state
+                            this.dispatchMessage("success", "All selected tags followed!", 5000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error in following tags:', error);
+                        this.dispatchMessage("warning", "Some tags could not be followed.", 5000);
+                        this.isLoading = false; // Reset loading state
+                    });
+            };
+
+            // Start processing the first batch
+            processBatch();
+        },
+
+        unFollowSelectedTags() {
+            if (this.selectedTags.length === 0) {
+                this.dispatchMessage("warning", "No tags selected!", 5000);
+                return;
+            }
+
+            // Ask if user wants to unfollow all tags
+            if (!confirm('Do you want to unfollow selected tags?')) {
+                return;
+            }
+
+            // check if last fetch was more than 5 minutes ago
+            if (this.getLastFetchTime() > 300) {
+                if (!confirm('Last fetch was more than 5 minutes ago. Do you want to fetch following status first?')) {
+                    return;
+                }
+                this.fetchFollowingTags();
+                return;
+            }
+
+            this.isLoading = true;
+            console.log('Unfollowing all tags');
+
+            const batchSize = 2;
+            let batchIndex = 0;
+
+            const processBatch = () => {
+                const batch = this.selectedTags.slice(batchIndex, batchIndex + batchSize);
+                const unfollowPromises = batch.map(tag => this.unfollowTag(tag, true));
+
+                // Wait for all unfollows in the current batch to complete
+                Promise.all(unfollowPromises)
+                    .then(() => {
+                        batchIndex += batchSize; // Move to the next batch
+
+                        // If there are more tags, continue processing after a 2-second delay
+                        if (batchIndex < this.selectedTags.length) {
+                            setTimeout(processBatch, 2000); // Wait 2 seconds and process next batch
+                        } else {
+                            this.isLoading = false; // Reset loading state
+                            this.dispatchMessage("success", "All tags unfollowed!", 5000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error in unfollowing tags:', error);
+                        this.dispatchMessage("warning", "Some tags could not be unfollowed.", 5000);
+                        this.isLoading = false; // Reset loading state
+                    });
+            };
+
+            // Start processing the first batch
+            processBatch();
+        },
+
+        getLastFetchTime() {
+            const lastFetchTime = this.lastFetchFollowingTagsTime || localStorage.getItem('lastFetchFollowingTagsTime');
+            return lastFetchTime ? Math.abs(new Date() - new Date(lastFetchTime)) / 1000 : 999999999;
+        },
+
+        sortTags(attribute) {
+            // Toggle sorting direction if the same header is clicked again
+            if (this.sortBy === attribute) {
+                this.sortDesc = !this.sortDesc;
+            } else {
+                this.sortBy = attribute;
+                this.sortDesc = false; // Default to ascending when changing sort attribute
+            }
+
+            // Sort based on the attribute
+            this.tags.sort((a, b) => {
+                let valA = a[attribute];
+                let valB = b[attribute];
+
+                // Handle case-insensitive sorting for strings (e.g., 'name')
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return this.sortDesc ? 1 : -1;
+                if (valA > valB) return this.sortDesc ? -1 : 1;
+                return 0;
+            });
+
+            // Update local storage
+            this.updateLocalStorageForTags();
+        },
+
+        filterTags() {
+            this.filteredTags = this.tags.filter((e) => {
+                let t = "all" === this.selectedFollowFilter || e.following == this.selectedFollowFilter;
+                
+                if (this.selectedFetchFilter === "all") {
+                    return t;
+                }
+
+                if (this.selectedFetchFilter === "0") {
+                    return t && (e.fetched === false || e.fetched === null);
+                }
+
+                if (this.selectedFetchFilter === "1") {
+                    return t && e.fetched === true;
+                }
+            });
+        },
+
+        downloadTagsJson() {
+            // Prepare the data
+            const data = this.tags.map(tag => ({
+                id: tag.id,
+                name: tag.name,
+                postsUrl: this.getTagPostsUrl(tag),
+                wikiUrl: this.getTagWikiUrl(tag),
+                following: tag.following
+            }));
+
+            // Convert the modified tags array to JSON
+            const tagsJson = JSON.stringify(data, null, 2); // Formatting for readability
+            const blob = new Blob([tagsJson], { type: 'application/json' });
+
+            // Open a new tab and display the JSON data with URLs
+            const newTab = window.open();
+            newTab.document.write(`<pre>${tagsJson}</pre>`); // Display JSON in a readable format
+            newTab.document.close();
+
+            // Optionally revoke the blob URL to free memory (after it's used)
+            URL.revokeObjectURL(newTab);
+        },
+
+        directDownloadTagsJson() {
+                // Prepare the data
+                const data = this.tags.map(tag => ({
+                    id: tag.id,
+                    name: tag.name,
+                    postsUrl: this.getTagPostsUrl(tag),
+                    wikiUrl: this.getTagWikiUrl(tag),
+                    following: tag.following
+                }));
+    
+                // Convert the data to JSON format
+                const jsonContent = JSON.stringify(data, null, 2);
+    
+                // Create a Blob from the JSON data
+                const blob = new Blob([jsonContent], { type: "application/json" });
+    
+                // Create a download link and trigger it
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'tags.json';
+                link.click();
+    
+                // Cleanup the URL object
+                URL.revokeObjectURL(url);
+        },
+    };
+}
